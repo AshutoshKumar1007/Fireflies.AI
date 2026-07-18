@@ -1,0 +1,261 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------- */
+/* Base                                                                        */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-fireflies-content-bg text-fireflies-text-primary font-body antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Typography                                                                  */
+/* -------------------------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-heading font-semibold tracking-tight;
+}
+
+p {
+  @apply leading-6;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Selection                                                                   */
+/* -------------------------------------------------------------------------- */
+
+::selection {
+  @apply bg-fireflies-primary text-white;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scrollbars                                                                  */
+/* -------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-gray-300;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Focus                                                                       */
+/* -------------------------------------------------------------------------- */
+
+*:focus-visible {
+  outline: 2px solid theme("colors.fireflies.primary");
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inputs                                                                      */
+/* -------------------------------------------------------------------------- */
+
+input,
+textarea,
+select {
+  @apply transition-colors duration-150;
+}
+
+input::placeholder,
+textarea::placeholder {
+  @apply text-fireflies-text-muted;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Range Slider                                                                */
+/* -------------------------------------------------------------------------- */
+
+input[type="range"] {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  @apply h-1 rounded-full bg-gray-200;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  @apply h-3 w-3 rounded-full bg-fireflies-primary;
+  margin-top: -4px;
+}
+
+input[type="range"]::-moz-range-track {
+  @apply h-1 rounded-full bg-gray-200;
+}
+
+input[type="range"]::-moz-range-thumb {
+  @apply h-3 w-3 rounded-full border-0 bg-fireflies-primary;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Utilities                                                                   */
+/* -------------------------------------------------------------------------- */
+
+@layer components {
+
+  .page-container {
+    @apply mx-auto w-full max-w-7xl px-8 py-8;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold;
+  }
+
+  .section-subtitle {
+    @apply mt-1 text-sm text-fireflies-text-secondary;
+  }
+
+  .surface {
+    @apply rounded-xl border border-fireflies-border bg-white;
+  }
+
+  .surface-hover {
+    @apply transition-colors duration-150 hover:bg-gray-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600;
+  }
+
+  .primary-button {
+    @apply rounded-lg bg-fireflies-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-fireflies-primary-hover;
+  }
+
+  .secondary-button {
+    @apply rounded-lg border border-fireflies-border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50;
+  }
+
+}
+
+@layer utilities {
+
+  .skeleton {
+    @apply animate-shimmer rounded-md bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%];
+  }
+
+}
+
+/* globals.css additions */
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-gray-200 bg-white shadow-sm;
+  }
+
+  .card-hover {
+    @apply transition-all duration-150 hover:border-gray-300 hover:shadow-md;
+  }
+
+  .panel {
+    @apply rounded-xl border border-gray-200 bg-white;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between border-b border-gray-100 px-5 py-4;
+  }
+
+  .panel-body {
+    @apply p-5;
+  }
+
+  .stat-value {
+    @apply mt-2 text-3xl font-bold tracking-tight;
+  }
+
+  .muted {
+    @apply text-fireflies-text-secondary;
+  }
+
+  .input {
+    @apply h-11 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none transition focus:border-fireflies-primary;
+  }
+
+  .input-with-icon {
+    @apply pl-11;
+  }
+
+  .divider {
+    @apply border-t border-gray-100;
+  }
+
+  .avatar {
+    @apply flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white transition hover:bg-gray-50;
+  }
+
+  .chip {
+    @apply rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600;
+  }
+
+  .section {
+    @apply space-y-5;
+  }
+
+  .title {
+    @apply text-lg font-semibold text-fireflies-text-primary;
+  }
+
+  .subtitle {
+    @apply text-sm text-fireflies-text-secondary;
+  }
+}
+
+@layer utilities {
+  .scroll-area {
+    scrollbar-gutter: stable;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
