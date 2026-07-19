@@ -1,5 +1,4 @@
 
-// app/meetings/[id]/page.tsx (PART 1)
 
 'use client';
 
@@ -32,6 +31,7 @@ import MeetingFormModal from '@/components/MeetingFormModal';
 import {
   fetchMeeting,
   deleteMeeting,
+  API_BASE_URL,
 } from '@/lib/api';
 
 import { MeetingDetail } from '@/lib/types';
@@ -41,8 +41,9 @@ import { useToast } from '@/components/Toast';
 import {
   formatDateTime,
   formatDuration,
-  getInitials,
 } from '@/lib/utils';
+
+import Avatar from '@/components/Avatar';
 
 export default function MeetingDetailPage() {
   const router = useRouter();
@@ -211,17 +212,7 @@ export default function MeetingDetailPage() {
               <div className="flex -space-x-2">
 
                 {meeting.participants.map((p) => (
-                  <div
-                    key={p.id}
-                    title={p.name}
-                    style={{
-                      backgroundColor:
-                        p.avatar_color,
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-semibold text-white"
-                  >
-                    {getInitials(p.name)}
-                  </div>
+                  <Avatar key={p.id} name={p.name} color={p.avatar_color} />
                 ))}
 
               </div>
@@ -236,7 +227,6 @@ export default function MeetingDetailPage() {
               className="relative"
               ref={exportRef}
             >
-{/* // app/meetings/[id]/page.tsx (PART 2) */}
               <button
                 onClick={() => setShowExport((v) => !v)}
                 className="secondary-button flex items-center gap-2"
@@ -262,7 +252,7 @@ export default function MeetingDetailPage() {
                   "
                 >
                   <a
-                    href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/meetings/${meeting.id}/export?format=md`}
+                    href={`${API_BASE_URL}/meetings/${meeting.id}/export?format=md`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setShowExport(false)}
@@ -272,7 +262,7 @@ export default function MeetingDetailPage() {
                   </a>
 
                   <a
-                    href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/meetings/${meeting.id}/export?format=txt`}
+                    href={`${API_BASE_URL}/meetings/${meeting.id}/export?format=txt`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setShowExport(false)}
@@ -339,7 +329,6 @@ export default function MeetingDetailPage() {
         <div className="w-[40%] overflow-y-auto bg-fireflies-content-bg p-5">
 
           <SummaryPanel
-            meetingId={meeting.id}
             summary={meeting.summary}
             actionItems={meeting.action_items}
             topics={meeting.topics}
@@ -351,7 +340,6 @@ export default function MeetingDetailPage() {
         </div>
 
       </div>
-{/* // app/meetings/[id]/page.tsx (PART 3 — END) */}
 
       <MeetingFormModal
         isOpen={isEditOpen}

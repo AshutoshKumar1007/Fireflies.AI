@@ -5,6 +5,7 @@ import { XMarkIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline';
 import { Participant, Meeting } from '@/lib/types';
 import { fetchParticipants, createMeeting, updateMeeting, uploadTranscript } from '@/lib/api';
 import { useToast } from './Toast';
+import Avatar from './Avatar';
 
 interface MeetingFormModalProps {
   isOpen: boolean;
@@ -268,12 +269,7 @@ export default function MeetingFormModal({
                       onChange={() => toggleParticipant(p.id)}
                       className="w-4 h-4 rounded border-gray-300 text-fireflies-primary focus:ring-fireflies-primary/30"
                     />
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-semibold flex-shrink-0"
-                      style={{ backgroundColor: p.avatar_color }}
-                    >
-                      {p.name.charAt(0).toUpperCase()}
-                    </div>
+                    <Avatar name={p.name} color={p.avatar_color} size="sm" />
                     <span className="text-sm text-fireflies-text-primary">{p.name}</span>
                   </label>
                 ))}

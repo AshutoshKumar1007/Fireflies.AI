@@ -11,11 +11,8 @@ import {
 } from '@heroicons/react/24/outline';
 
 import { Meeting } from '@/lib/types';
-import {
-  formatDateTime,
-  formatDuration,
-  getInitials,
-} from '@/lib/utils';
+import { formatDateTime, formatDuration } from '@/lib/utils';
+import Avatar from './Avatar';
 
 interface Props {
   meeting: Meeting;
@@ -85,19 +82,11 @@ export default function MeetingCard({ meeting }: Props) {
               </div>
           )}
           {meeting.participants.slice(0, 4).map((participant) => (
-            <div
+            <Avatar
               key={participant.id}
-              title={participant.name}
-              style={{ backgroundColor: participant.avatar_color }}
-              className="
-                flex h-8 w-8 items-center justify-center
-                rounded-full
-                border-2 border-white
-                text-[11px] font-semibold text-white
-              "
-            >
-              {getInitials(participant.name)}
-            </div>
+              name={participant.name}
+              color={participant.avatar_color}
+            />
           ))}
 
           {meeting.participants.length > 4 && (

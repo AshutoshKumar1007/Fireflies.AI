@@ -59,6 +59,57 @@ def get_participant(
 
     return participant
 
+class ParsedLine:
+    """Result of matching a single raw transcript line against the
+    supported formats below."""
+
+    __slots__ = ("speaker_name", "start_seconds", "text")
+
+    def __init__(
+        self,
+        speaker_name: str | None,
+        start_seconds: int | None,
+        text: str,
+    ) -> None:
+        self.speaker_name = speaker_name
+        self.start_seconds = start_seconds
+        self.text = text
+
+
+def match_line(line: str) -> ParsedLine:
+    """Try each supported transcript line format in turn, most specific
+    first:
+      - "Speaker [MM:SS]: text" / "Speaker [H:MM:SS]: text"
+      - "[MM:SS] Speaker: text" / "[H:MM:SS] Speaker: text"
+      - "Speaker: text" (no timestamp)
+      - plain text with no speaker or timestamp at all
+    """
+    match = TIMESTAMP_PATTERN.match(line)
+    if match:
+        speaker_name, hours, minutes, seconds, text = match.groups()
+        return ParsedLine(
+            speaker_name=speaker_name,
+            start_seconds=parse_timestamp(hours, minutes, seconds),
+            text=text,
+        )
+
+    match = TIMESTAMP_FIRST_PATTERN.match(line)
+    if match:
+        hours, minutes, seconds, speaker_name, text = match.groups()
+        return ParsedLine(
+            speaker_name=speaker_name,
+            start_seconds=parse_timestamp(hours, minutes, seconds),
+            text=text,
+        )
+
+    match = SIMPLE_PATTERN.match(line)
+    if match:
+        speaker_name, text = match.groups()
+        return ParsedLine(speaker_name=speaker_name, start_seconds=None, text=text)
+
+    return ParsedLine(speaker_name=None, start_seconds=None, text=line)
+
+
 def parse_transcript(
     db: Session,
     meeting: Meeting,
@@ -76,136 +127,98 @@ def parse_transcript(
     ]
 
     for order_index, line in enumerate(lines):
+        parsed = match_line(line)
 
-        match = TIMESTAMP_PATTERN.match(line)
-
-        if match:
-
-            speaker_name = match.group(1)
-
-            start_seconds = parse_timestamp(
-                match.group(2),
-                match.group(3),
-                match.group(4),
-            )
-
-            text = match.group(5)
-
-            speaker = get_participant(
-                db,
-                participant_cache,
-                speaker_name,
-            )
-
-            segments.append(
-                TranscriptSegment(
-                    meeting_id=meeting.id,
-                    speaker_id=speaker.id if speaker else None,
-                    start_time_seconds=start_seconds,
-                    text=text,
-                    order_index=order_index,
-                )
-            )
-
-            continue
-        match = TIMESTAMP_FIRST_PATTERN.match(line)
-
-        if match:
-
-            start_seconds = parse_timestamp(
-                match.group(1),
-                match.group(2),
-                match.group(3),
-            )
-
-            speaker_name = match.group(4)
-            text = match.group(5)
-
-            speaker = get_participant(
-                db,
-                participant_cache,
-                speaker_name,
-            )
-
-            segments.append(
-                TranscriptSegment(
-                    meeting_id=meeting.id,
-                    speaker_id=speaker.id if speaker else None,
-                    start_time_seconds=start_seconds,
-                    text=text,
-                    order_index=order_index,
-                )
-            )
-
-            continue
-        match = SIMPLE_PATTERN.match(line)
-
-        if match:
-
-            speaker_name = match.group(1)
-
-            text = match.group(2)
-
-            speaker = get_participant(
-                db,
-                participant_cache,
-                speaker_name,
-            )
-
-            segments.append(
-                TranscriptSegment(
-                    meeting_id=meeting.id,
-                    speaker_id=speaker.id if speaker else None,
-                    text=text,
-                    order_index=order_index,
-                )
-            )
-
-            continue
+        speaker = (
+            get_participant(db, participant_cache, parsed.speaker_name)
+            if parsed.speaker_name
+            else None
+        )
 
         segments.append(
             TranscriptSegment(
                 meeting_id=meeting.id,
-                text=line,
+                speaker_id=speaker.id if speaker else None,
+                start_time_seconds=parsed.start_seconds,
+                text=parsed.text,
                 order_index=order_index,
             )
         )
 
     if segments:
-
-        # Fill in any missing start times.
-        missing = [
-            segment
-            for segment in segments
-            if segment.start_time_seconds is None
-        ]
-
-        if meeting.duration_seconds and missing:
-            for index, segment in enumerate(missing):
-                segment.start_time_seconds = (
-                    meeting.duration_seconds
-                    * index
-                    / len(missing)
-                )
-
-        elif missing:
-            for index, segment in enumerate(missing):
-                segment.start_time_seconds = float(index)
-
-        # Compute end times.
-        for i in range(len(segments) - 1):
-            segments[i].end_time_seconds = (
-                segments[i + 1].start_time_seconds
-            )
-
-        if meeting.duration_seconds:
-            segments[-1].end_time_seconds = float(meeting.duration_seconds)
-        else:
-            segments[-1].end_time_seconds = (
-                segments[-1].start_time_seconds + 1.0
-            )
+        _normalize_segment_timing(segments, meeting.duration_seconds)
 
     return segments
+
+
+def _normalize_segment_timing(
+    segments: list[TranscriptSegment],
+    duration_seconds: int | None,
+) -> None:
+    """Assign start/end times to every segment such that the DB's
+    `start_time_seconds < end_time_seconds` constraint always holds, even
+    when the uploaded transcript mixes timestamped and un-timestamped
+    lines, or has timestamps that aren't in chronological order."""
+
+    n = len(segments)
+    known = [i for i, s in enumerate(segments) if s.start_time_seconds is not None]
+
+    if not known:
+        for i, segment in enumerate(segments):
+            segment.start_time_seconds = (
+                duration_seconds * i / n if duration_seconds else float(i)
+            )
+    else:
+        # Interpolate any un-timestamped run before the first known point.
+        first = known[0]
+        if first > 0:
+            end_val = segments[first].start_time_seconds
+            step = end_val / (first + 1)
+            for i in range(first):
+                segments[i].start_time_seconds = step * i
+
+        # Interpolate un-timestamped runs between two known points.
+        for a, b in zip(known, known[1:]):
+            gap = b - a
+            if gap <= 1:
+                continue
+            start_val = segments[a].start_time_seconds
+            step = (segments[b].start_time_seconds - start_val) / gap
+            for offset in range(1, gap):
+                segments[a + offset].start_time_seconds = start_val + step * offset
+
+        # Interpolate any un-timestamped run after the last known point.
+        last = known[-1]
+        if last < n - 1:
+            start_val = segments[last].start_time_seconds
+            remaining = n - 1 - last
+            end_val = (
+                duration_seconds
+                if duration_seconds and duration_seconds > start_val
+                else start_val + remaining
+            )
+            step = max((end_val - start_val) / (remaining + 1), 1.0)
+            for offset in range(1, remaining + 1):
+                segments[last + offset].start_time_seconds = start_val + step * offset
+
+    # Guarantee non-decreasing start times, even for explicit timestamps
+    # that were typed out of chronological order.
+    for i in range(1, n):
+        if segments[i].start_time_seconds < segments[i - 1].start_time_seconds:
+            segments[i].start_time_seconds = segments[i - 1].start_time_seconds
+
+    # End time = next segment's start, unless that would violate
+    # start < end (e.g. two segments sharing the same start second).
+    for i in range(n - 1):
+        start = segments[i].start_time_seconds
+        end = segments[i + 1].start_time_seconds
+        segments[i].end_time_seconds = end if end > start else start + 1.0
+
+    last_segment = segments[-1]
+    if duration_seconds and duration_seconds > last_segment.start_time_seconds:
+        last_segment.end_time_seconds = float(duration_seconds)
+    else:
+        last_segment.end_time_seconds = last_segment.start_time_seconds + 1.0
 @router.post(
     "/meetings/{meeting_id}/transcript",
     response_model=list[TranscriptSegmentResponse],

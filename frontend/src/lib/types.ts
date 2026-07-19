@@ -28,7 +28,7 @@ export interface MeetingDetail extends Meeting {
 export interface TranscriptSegment {
   id: number;
   meeting_id: number;
-  speaker: Participant;
+  speaker: Participant | null;
   start_time_seconds: number;
   end_time_seconds: number;
   text: string;
@@ -61,11 +61,8 @@ export interface SearchResult {
   meeting_id: number;
   meeting_title: string;
   meeting_date: string;
-  matches: {
-    segment_text: string;
-    speaker_name: string;
-    timestamp: number;
-  }[];
+  snippet: string;
+  match_type: 'title' | 'transcript';
 }
 
 /* ===== Request/payload types for mutations ===== */

@@ -8,7 +8,8 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { TranscriptSegment } from '@/lib/types';
-import { formatTime, getInitials } from '@/lib/utils';
+import { formatTime } from '@/lib/utils';
+import Avatar from './Avatar';
 
 interface TranscriptPanelProps {
   segments: TranscriptSegment[];
@@ -238,20 +239,17 @@ export default function TranscriptPanel({
                 `}
               >
                 {/* Speaker avatar */}
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5"
-                  style={{
-                    backgroundColor: segment.speaker?.avatar_color ?? '#9CA3AF',
-                  }}
-                >
-                  {getInitials(segment.speaker.name ?? 'Unknown')}
-                </div>
+                <Avatar
+                  name={segment.speaker?.name ?? 'Unknown'}
+                  color={segment.speaker?.avatar_color ?? '#9CA3AF'}
+                  className="mt-0.5"
+                />
 
                 <div className="flex-1 min-w-0">
                   {/* Speaker name + timestamp */}
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-semibold text-fireflies-text-primary">
-                      {segment.speaker.name ?? 'Unknown Speaker'}
+                      {segment.speaker?.name ?? 'Unknown Speaker'}
                     </span>
                     <span className="text-xs text-fireflies-primary font-mono group-hover:underline">
                       {formatTime(segment.start_time_seconds)}

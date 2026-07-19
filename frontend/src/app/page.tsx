@@ -1,9 +1,9 @@
 
-// app/page.tsx (PART 1)
 
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   PlusIcon,
   TrashIcon,
@@ -14,8 +14,8 @@ import SearchBar from '@/components/SearchBar';
 import MeetingCard from '@/components/MeetingCard';
 import MeetingFormModal from '@/components/MeetingFormModal';
 
-import { fetchMeetings, deleteMeeting } from '@/lib/api';
-import { Meeting } from '@/lib/types';
+import { fetchMeetings, deleteMeeting, globalSearch } from '@/lib/api';
+import { Meeting, SearchResult } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 
 export default function Dashboard() {
@@ -27,6 +27,10 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState('date_desc');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Transcript-content matches that aren't already covered by the
+  // title-filtered `meetings` list above (backed by /api/search).
+  const [transcriptMatches, setTranscriptMatches] = useState<SearchResult[]>([]);
 
   const { showToast } = useToast();
 
@@ -56,6 +60,41 @@ export default function Dashboard() {
   useEffect(() => {
     loadMeetings();
   }, [loadMeetings]);
+
+  // Search transcript content too, not just titles, so a query like a
+  // phrase someone said in a meeting still surfaces that meeting.
+  useEffect(() => {
+    const query = searchQuery.trim();
+
+    if (!query) {
+      setTranscriptMatches([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    globalSearch(query)
+      .then((results) => {
+        if (cancelled) return;
+        setTranscriptMatches(
+          results.filter((r) => r.match_type === 'transcript')
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setTranscriptMatches([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery]);
+
+  // Don't show a transcript match for a meeting already visible in the
+  // title-filtered grid above.
+  const visibleTranscriptMatches = useMemo(() => {
+    const visibleIds = new Set(meetings.map((m) => m.id));
+    return transcriptMatches.filter((r) => !visibleIds.has(r.meeting_id));
+  }, [transcriptMatches, meetings]);
 
   const handleDeleteMeeting = async (
     id: number,
@@ -187,7 +226,6 @@ export default function Dashboard() {
           />
 
         </div>
-        {/* // app/page.tsx (PART 2) */}
 
         {loading ? (
 
@@ -224,7 +262,7 @@ export default function Dashboard() {
 
           </div>
 
-        ) : meetings.length === 0 ? (
+        ) : meetings.length === 0 && !searchQuery ? (
 
           <div className="surface py-20 text-center">
 
@@ -243,6 +281,12 @@ export default function Dashboard() {
               Create Meeting
             </button>
 
+          </div>
+
+        ) : meetings.length === 0 ? (
+
+          <div className="surface py-12 text-center text-sm text-fireflies-text-secondary">
+            No meeting titles match &ldquo;{searchQuery}&rdquo;.
           </div>
 
         ) : (
@@ -295,8 +339,32 @@ export default function Dashboard() {
 
         )}
 
+        {visibleTranscriptMatches.length > 0 && (
+          <div className="surface p-5">
+            <h2 className="mb-3 text-sm font-semibold text-fireflies-text-secondary">
+              Also found in transcripts
+            </h2>
+
+            <div className="space-y-2">
+              {visibleTranscriptMatches.map((match) => (
+                <Link
+                  key={match.meeting_id}
+                  href={`/meetings/${match.meeting_id}`}
+                  className="block rounded-xl border border-gray-200 p-3 text-sm transition hover:border-gray-300 hover:bg-gray-50"
+                >
+                  <p className="font-medium text-fireflies-text-primary">
+                    {match.meeting_title}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-fireflies-text-secondary">
+                    &ldquo;{match.snippet}&rdquo;
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
-      {/* // app/page.tsx (PART 3 — END) */}
 
       <MeetingFormModal
         isOpen={isModalOpen}

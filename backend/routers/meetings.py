@@ -42,6 +42,35 @@ def sanitize_filename(title: str) -> str:
     return filename.strip("_") or "meeting"
 
 
+def get_full_meeting_or_404(db: Session, meeting_id: int) -> Meeting:
+    """Fetch a meeting with every related collection eager-loaded and its
+    transcript segments in order. Used by both the detail view and export,
+    which both need the full object graph."""
+    meeting = (
+        db.query(Meeting)
+        .options(
+            selectinload(Meeting.participants),
+            selectinload(Meeting.transcript_segments).selectinload(
+                TranscriptSegment.speaker
+            ),
+            selectinload(Meeting.topics),
+            selectinload(Meeting.summary),
+            selectinload(Meeting.action_items).selectinload(
+                ActionItem.assignee
+            ),
+        )
+        .filter(Meeting.id == meeting_id)
+        .first()
+    )
+
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    meeting.transcript_segments.sort(key=lambda segment: segment.order_index)
+
+    return meeting
+
+
 @router.get("", response_model=list[MeetingListResponse])
 def list_meetings(
     search: str | None = None,
@@ -121,32 +150,7 @@ def get_meeting(
     meeting_id: int,
     db: Session = Depends(get_db),
 ):
-    meeting = (
-        db.query(Meeting)
-        .options(
-            selectinload(Meeting.participants),
-            selectinload(Meeting.transcript_segments).selectinload(
-                TranscriptSegment.speaker
-            ),
-            selectinload(Meeting.topics),
-            selectinload(Meeting.summary),
-            selectinload(Meeting.action_items).selectinload(
-                ActionItem.assignee
-            ),
-        )
-        .filter(Meeting.id == meeting_id)
-        .first()
-    )
-
-    if meeting is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meeting not found",
-        )
-
-    meeting.transcript_segments.sort(key=lambda segment: segment.order_index)
-
-    return meeting
+    return get_full_meeting_or_404(db, meeting_id)
 
 
 @router.put("/{meeting_id}", response_model=MeetingListResponse)
@@ -226,225 +230,131 @@ def export_meeting(
     ),
     db: Session = Depends(get_db),
 ):
-    meeting = (
-        db.query(Meeting)
-        .options(
-            selectinload(Meeting.participants),
-            selectinload(Meeting.transcript_segments).selectinload(
-                TranscriptSegment.speaker
-            ),
-            selectinload(Meeting.topics),
-            selectinload(Meeting.summary),
-            selectinload(Meeting.action_items).selectinload(
-                ActionItem.assignee
-            ),
-        )
-        .filter(Meeting.id == meeting_id)
-        .first()
-    )
-
-    if meeting is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meeting not found",
-        )
-
-    meeting.transcript_segments.sort(
-        key=lambda segment: segment.order_index
-    )
-
+    meeting = get_full_meeting_or_404(db, meeting_id)
     filename = sanitize_filename(meeting.title)
 
     if format == "txt":
-        lines: list[str] = []
-
-        lines.append(f"Title: {meeting.title}")
-        lines.append(
-            f"Date: {meeting.date.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-
-        if meeting.duration_seconds:
-            lines.append(
-                f"Duration: {meeting.duration_seconds // 60} minutes"
-            )
-
-        lines.append("")
-
-        if meeting.participants:
-            lines.append(
-                "Participants: "
-                + ", ".join(
-                    participant.name
-                    for participant in meeting.participants
-                )
-            )
-            lines.append("")
-
-        if meeting.summary:
-            lines.append("SUMMARY")
-            lines.append(meeting.summary.overview_text)
-            lines.append("")
-
-        if meeting.topics:
-            lines.append("TOPICS")
-
-            for topic in meeting.topics:
-                lines.append(
-                    f"[{format_timestamp(topic.start_time_seconds)}] "
-                    f"{topic.title}"
-                )
-
-            lines.append("")
-
-        if meeting.action_items:
-            lines.append("ACTION ITEMS")
-
-            for item in meeting.action_items:
-                assignee = (
-                    item.assignee.name
-                    if item.assignee
-                    else "Unassigned"
-                )
-
-                status = "[x]" if item.is_completed else "[ ]"
-
-                due = (
-                    f" (Due: {item.due_date})"
-                    if item.due_date
-                    else ""
-                )
-
-                lines.append(
-                    f"{status} {item.text} "
-                    f"- {assignee}{due}"
-                )
-
-            lines.append("")
-
-        lines.append("TRANSCRIPT")
-
-        for segment in meeting.transcript_segments:
-            speaker = (
-                segment.speaker.name
-                if segment.speaker
-                else "Unknown"
-            )
-
-            timestamp = format_timestamp(
-                segment.start_time_seconds
-            )
-
-            lines.append(
-                f"[{timestamp}] {speaker}: {segment.text}"
-            )
-
-        content = "\n".join(lines)
-
+        content = render_meeting_txt(meeting)
         return Response(
             content=content,
             media_type="text/plain",
             headers={
-                "Content-Disposition":
-                    f'attachment; filename="{filename}.txt"'
+                "Content-Disposition": f'attachment; filename="{filename}.txt"'
             },
         )
-        
-    # Markdown export
-    lines: list[str] = []
 
-    lines.append(f"# {meeting.title}")
-    lines.append("")
-    lines.append(
-        f"**Date:** {meeting.date.strftime('%B %d, %Y • %I:%M %p')}"
+    content = render_meeting_markdown(meeting)
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}.md"'
+        },
     )
 
+
+def _format_participants_line(meeting: Meeting) -> str | None:
+    if not meeting.participants:
+        return None
+    return ", ".join(p.name for p in meeting.participants)
+
+
+def _format_action_item(item: ActionItem, *, markdown: bool) -> str:
+    """Render a single action item as a checklist line, shared by both
+    the plain-text and markdown exporters."""
+    if markdown:
+        assignee = f"**{item.assignee.name}**" if item.assignee else "_Unassigned_"
+        status = "- [x]" if item.is_completed else "- [ ]"
+        due = f" _(Due: {item.due_date})_" if item.due_date else ""
+        return f"{status} {item.text} — {assignee}{due}"
+
+    assignee = item.assignee.name if item.assignee else "Unassigned"
+    status = "[x]" if item.is_completed else "[ ]"
+    due = f" (Due: {item.due_date})" if item.due_date else ""
+    return f"{status} {item.text} - {assignee}{due}"
+
+
+def _speaker_name(segment: TranscriptSegment) -> str:
+    return segment.speaker.name if segment.speaker else "Unknown"
+
+
+def render_meeting_txt(meeting: Meeting) -> str:
+    lines: list[str] = [
+        f"Title: {meeting.title}",
+        f"Date: {meeting.date.strftime('%Y-%m-%d %H:%M:%S')}",
+    ]
+
     if meeting.duration_seconds:
-        lines.append(
-            f"**Duration:** {meeting.duration_seconds // 60} minutes"
-        )
-
-    if meeting.participants:
-        participant_names = ", ".join(
-            participant.name
-            for participant in meeting.participants
-        )
-        lines.append(f"**Participants:** {participant_names}")
+        lines.append(f"Duration: {meeting.duration_seconds // 60} minutes")
 
     lines.append("")
-    lines.append("---")
-    lines.append("")
+
+    participants_line = _format_participants_line(meeting)
+    if participants_line:
+        lines.append(f"Participants: {participants_line}")
+        lines.append("")
 
     if meeting.summary:
-        lines.append("## Summary")
+        lines += ["SUMMARY", meeting.summary.overview_text, ""]
+
+    if meeting.topics:
+        lines.append("TOPICS")
+        for topic in meeting.topics:
+            lines.append(f"[{format_timestamp(topic.start_time_seconds)}] {topic.title}")
         lines.append("")
-        lines.append(meeting.summary.overview_text)
+
+    if meeting.action_items:
+        lines.append("ACTION ITEMS")
+        for item in meeting.action_items:
+            lines.append(_format_action_item(item, markdown=False))
         lines.append("")
+
+    lines.append("TRANSCRIPT")
+    for segment in meeting.transcript_segments:
+        timestamp = format_timestamp(segment.start_time_seconds)
+        lines.append(f"[{timestamp}] {_speaker_name(segment)}: {segment.text}")
+
+    return "\n".join(lines)
+
+
+def render_meeting_markdown(meeting: Meeting) -> str:
+    lines: list[str] = [
+        f"# {meeting.title}",
+        "",
+        f"**Date:** {meeting.date.strftime('%B %d, %Y • %I:%M %p')}",
+    ]
+
+    if meeting.duration_seconds:
+        lines.append(f"**Duration:** {meeting.duration_seconds // 60} minutes")
+
+    participants_line = _format_participants_line(meeting)
+    if participants_line:
+        lines.append(f"**Participants:** {participants_line}")
+
+    lines += ["", "---", ""]
+
+    if meeting.summary:
+        lines += ["## Summary", "", meeting.summary.overview_text, ""]
 
     if meeting.topics:
         lines.append("## Topics")
         lines.append("")
-
         for topic in meeting.topics:
             timestamp = format_timestamp(topic.start_time_seconds)
-            lines.append(
-                f"- **{timestamp}** — {topic.title}"
-            )
-
+            lines.append(f"- **{timestamp}** — {topic.title}")
         lines.append("")
 
     if meeting.action_items:
         lines.append("## Action Items")
         lines.append("")
-
         for item in meeting.action_items:
-            assignee = (
-                f"**{item.assignee.name}**"
-                if item.assignee
-                else "_Unassigned_"
-            )
-
-            status = "- [x]" if item.is_completed else "- [ ]"
-
-            due = (
-                f" _(Due: {item.due_date})_"
-                if item.due_date
-                else ""
-            )
-
-            lines.append(
-                f"{status} {item.text} — {assignee}{due}"
-            )
-
+            lines.append(_format_action_item(item, markdown=True))
         lines.append("")
 
     lines.append("## Transcript")
     lines.append("")
-
     for segment in meeting.transcript_segments:
-        speaker = (
-            segment.speaker.name
-            if segment.speaker
-            else "Unknown"
-        )
+        timestamp = format_timestamp(segment.start_time_seconds)
+        lines += [f"### {_speaker_name(segment)} [{timestamp}]", "", segment.text, ""]
 
-        timestamp = format_timestamp(
-            segment.start_time_seconds
-        )
-
-        lines.append(
-            f"### {speaker} [{timestamp}]"
-        )
-        lines.append("")
-        lines.append(segment.text)
-        lines.append("")
-
-    content = "\n".join(lines)
-
-    return Response(
-        content=content,
-        media_type="text/markdown",
-        headers={
-            "Content-Disposition":
-                f'attachment; filename="{filename}.md"'
-        },
-    )
+    return "\n".join(lines)

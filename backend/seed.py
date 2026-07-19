@@ -328,7 +328,10 @@ def seed_database(db: Session) -> None:
     print("Database seeding completed successfully.")
 
 if __name__ == "__main__":
-    from database import SessionLocal
+    from database import Base, SessionLocal, engine
+
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     seed_database(db)
     db.close()

@@ -1,6 +1,3 @@
-
-// components/SummaryPanel.tsx (PART 1)
-
 'use client';
 
 import { useMemo, useState } from 'react';
@@ -10,7 +7,6 @@ import {
   UserGroupIcon,
   SparklesIcon,
   TagIcon,
-  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 
 import { updateActionItem } from '@/lib/api';
@@ -20,9 +16,11 @@ import {
   Topic,
   Summary,
 } from '@/lib/types';
+import { formatTime } from '@/lib/utils';
+import { useToast } from './Toast';
+import Avatar from './Avatar';
 
 interface Props {
-  meetingId: number;
   summary: Summary | null;
   actionItems: ActionItem[];
   topics: Topic[];
@@ -32,7 +30,6 @@ interface Props {
 }
 
 export default function SummaryPanel({
-  meetingId,
   summary,
   actionItems,
   topics,
@@ -41,6 +38,7 @@ export default function SummaryPanel({
   onActionItemsChange,
 }: Props) {
   const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
 
   const completed = useMemo(
   () => actionItems.filter((a) => a.is_completed).length,
@@ -56,6 +54,11 @@ export default function SummaryPanel({
       });
 
       onActionItemsChange();
+    } catch (err) {
+      showToast(
+        'error',
+        err instanceof Error ? err.message : 'Failed to update action item'
+      );
     } finally {
       setSaving(false);
     }
@@ -103,7 +106,6 @@ export default function SummaryPanel({
         </div>
 
         <div className="space-y-3">
-{/* // components/SummaryPanel.tsx (PART 2) */}
 
           {actionItems.length === 0 && (
             <div className="rounded-xl border border-dashed border-gray-200 p-5 text-sm text-fireflies-text-secondary">
@@ -178,7 +180,6 @@ export default function SummaryPanel({
         </div>
 
         <div className="space-y-2">
-{/* // components/SummaryPanel.tsx (PART 3) */}
           {topics.length === 0 && (
             <p className="text-sm text-fireflies-text-secondary">
               No topics detected.
@@ -210,10 +211,7 @@ export default function SummaryPanel({
               </span>
 
               <span className="text-xs text-fireflies-text-secondary">
-                {Math.floor(topic.start_time_seconds / 60)}:
-                {String(
-                  Math.floor(topic.start_time_seconds % 60)
-                ).padStart(2, '0')}
+                {formatTime(topic.start_time_seconds)}
               </span>
             </button>
           ))}
@@ -236,7 +234,6 @@ export default function SummaryPanel({
 
         <div className="space-y-2">
 
-{/* // components/SummaryPanel.tsx (PART 4 — END) */}
           {participants.length === 0 && (
             <p className="text-sm text-fireflies-text-secondary">
               No participants available.
@@ -257,28 +254,7 @@ export default function SummaryPanel({
                 py-2.5
               "
             >
-              <div
-                style={{
-                  backgroundColor: participant.avatar_color,
-                }}
-                className="
-                  flex
-                  h-10
-                  w-10
-                  items-center
-                  justify-center
-                  rounded-full
-                  text-sm
-                  font-semibold
-                  text-white
-                "
-              >
-                {participant.name
-                  .split(' ')
-                  .map((s) => s[0])
-                  .join('')
-                  .slice(0, 2)}
-              </div>
+              <Avatar name={participant.name} color={participant.avatar_color} size="lg" />
 
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-fireflies-text-primary">

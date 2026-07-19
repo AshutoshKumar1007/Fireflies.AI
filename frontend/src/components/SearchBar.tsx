@@ -1,6 +1,3 @@
-
-// components/SearchBar.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,6 +6,9 @@ import {
   ArrowsUpDownIcon,
   UserIcon,
 } from '@heroicons/react/24/outline';
+
+import { fetchParticipants } from '@/lib/api';
+import { Participant } from '@/lib/types';
 
 interface Props {
   onSearchChange: (value: string) => void;
@@ -24,7 +24,16 @@ export default function SearchBar({
   currentSort,
 }: Props) {
   const [search, setSearch] = useState('');
-  const [participant, setParticipant] = useState('');
+  const [participantId, setParticipantId] = useState('');
+  const [participants, setParticipants] = useState<Participant[]>([]);
+
+  useEffect(() => {
+    fetchParticipants()
+      .then(setParticipants)
+      .catch(() => {
+        // Filter dropdown just stays empty; search/sort still work.
+      });
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -34,18 +43,10 @@ export default function SearchBar({
     return () => clearTimeout(timer);
   }, [search, onSearchChange]);
 
-  useEffect(() => {
-    if (!participant.trim()) {
-      onParticipantFilter(undefined);
-      return;
-    }
-
-    const value = Number(participant);
-
-    if (!Number.isNaN(value)) {
-      onParticipantFilter(value);
-    }
-  }, [participant, onParticipantFilter]);
+  const handleParticipantChange = (value: string) => {
+    setParticipantId(value);
+    onParticipantFilter(value ? Number(value) : undefined);
+  };
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row">
@@ -55,7 +56,7 @@ export default function SearchBar({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search meetings, summaries or transcript..."
+          placeholder="Search meetings by title..."
           className="
             h-11
             w-full
@@ -73,16 +74,16 @@ export default function SearchBar({
         />
       </div>
 
-      <div className="relative w-full lg:w-48">
+      <div className="relative w-full lg:w-56">
         <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
-        <input
-          value={participant}
-          onChange={(e) => setParticipant(e.target.value)}
-          placeholder="Filter by participant ID"
+        <select
+          value={participantId}
+          onChange={(e) => handleParticipantChange(e.target.value)}
           className="
             h-11
             w-full
+            appearance-none
             rounded-xl
             border
             border-gray-200
@@ -94,7 +95,14 @@ export default function SearchBar({
             transition
             focus:border-fireflies-primary
           "
-        />
+        >
+          <option value="">All participants</option>
+          {participants.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="relative w-full lg:w-52">
